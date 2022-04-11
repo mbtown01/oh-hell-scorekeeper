@@ -1,14 +1,15 @@
 import numpy as np
 import cv2 as cv
-import tensorflow as tf
 
 from random import randint, random
 from glob import glob
 from shapely.geometry import Polygon as ShapelyPolygon
-from object_detection.utils import dataset_util
+from os.path import exists
+from os import mkdir
 
-SCENE_WIDTH = 300
-SCENE_HEIGHT = 300
+
+SCENE_WIDTH = 416
+SCENE_HEIGHT = 416
 
 
 class Polygon(ShapelyPolygon):
@@ -30,11 +31,11 @@ class Polygon(ShapelyPolygon):
 
 class Card:
 
-    def __init__(self, suit: str, value: str, label: int, image):
+    def __init__(self, suit: str, value: str, cardClass: int, image):
         self.suit = suit
         self.value = value
         self.name = f"{value}{suit}"
-        self.label = label
+        self.cardClass = cardClass
         self.image = image
 
         xMin, xMax = 8, 40
@@ -66,7 +67,7 @@ class Card:
             int(a) for a in extentsPolygon.bounds)
 
         croppedImage = newImage[minY:maxY+1, minX:maxX+1]
-        card = Card(self.suit, self.value, self.label, croppedImage)
+        card = Card(self.suit, self.value, self.cardClass, croppedImage)
         card.extentsPolygon = extentsPolygon.transform(
             np.identity(3), -minX, -minY)
         card.cornerPolygons = list(
@@ -75,7 +76,7 @@ class Card:
         return card
 
     def translated(self, offX: int, offY: int):
-        card = Card(self.suit, self.value, self.label, self.image.copy())
+        card = Card(self.suit, self.value, self.cardClass, self.image.copy())
 
         M = np.identity(3)
         card.extentsPolygon = self.extentsPolygon.transform(M, offX, offY)
@@ -116,6 +117,7 @@ class Deck:
                      '7', '8', '9', 'T', 'J', 'Q', 'K']
 
         self.cardList = list()
+        self._dealIndex = 0
 
         for (xMin, xMax), valLabel in zip(colBoundaries, valLabels):
             for (yMin, yMax), suitLabel in zip(rowBoundaries, suitLabels):
@@ -133,6 +135,22 @@ class Deck:
 
     def getRandom(self):
         return self.cardList[randint(0, len(self.cardList)-1)]
+
+    def getRotatingNext(self):
+        card = self.cardList[self._dealIndex]
+        self._dealIndex = (self._dealIndex+1) % len(self.cardList)
+        return card
+
+    def writeLabelMap(self, path: str):
+        # label_map.pbtxt
+        with open(path, 'w') as writer:
+            for card in self.cardList:
+                writer.writelines([
+                    "item {\n",
+                    f"  id: {card.cardClass}\n",
+                    f'  name: "{card.name}"\n',
+                    "}\n\n",
+                ])
 
 
 class BackgroundImage:
@@ -200,43 +218,43 @@ class Scene:
             for i, card in enumerate(self.cardList)
         }
 
-    def buildTFExample(self):
-        # Based on https://towardsdatascience.com/a-practical-guide-to-tfrecords-584536bc786c
-        height, width, _ = self.image.shape
-        # imageEncoded = cv.cvtColor(self.image, cv.COLOR_BGR2RGB)
-        imageEncoded = cv.imencode('.png', self.image)[1]
-        imageEncoded = np.asarray(imageEncoded)
-        imageEncoded = np.expand_dims(imageEncoded, axis=0)
-        imageEncoded = bytes(imageEncoded)
-        imageFormat = b'png'
-        filename = b''  # Filename of the image. Empty if image is not from file
+    # def buildTFExample(self):
+    #     # Based on https://towardsdatascience.com/a-practical-guide-to-tfrecords-584536bc786c
+    #     height, width, _ = self.image.shape
+    #     # imageEncoded = cv.cvtColor(self.image, cv.COLOR_BGR2RGB)
+    #     imageEncoded = cv.imencode('.png', self.image)[1]
+    #     imageEncoded = np.asarray(imageEncoded)
+    #     imageEncoded = np.expand_dims(imageEncoded, axis=0)
+    #     imageEncoded = bytes(imageEncoded)
+    #     imageFormat = b'png'
+    #     filename = b''  # Filename of the image. Empty if image is not from file
 
-        xmins, xmaxs, ymins, ymaxs, classNames, classLabels = \
-            [], [], [], [], [], [],
-        for card, cornerPolygons in self.visibleCardCorners.items():
-            for cp in cornerPolygons:
-                minX, minY, maxX, maxY = cp.bounds
-                xmins.append(minX / width)
-                xmaxs.append(maxX / width)
-                ymins.append(minY / height)
-                ymaxs.append(maxY / height)
-                classNames.append(card.name.encode('utf-8'))
-                classLabels.append(card.label)
+    #     xmins, xmaxs, ymins, ymaxs, classNames, classLabels = \
+    #         [], [], [], [], [], [],
+    #     for card, cornerPolygons in self.visibleCardCorners.items():
+    #         for cp in cornerPolygons:
+    #             minX, minY, maxX, maxY = cp.bounds
+    #             xmins.append(minX / width)
+    #             xmaxs.append(maxX / width)
+    #             ymins.append(minY / height)
+    #             ymaxs.append(maxY / height)
+    #             classNames.append(card.name.encode('utf-8'))
+    #             classLabels.append(card.cardClass)
 
-        return tf.train.Example(features=tf.train.Features(feature={
-            'image/height': dataset_util.int64_feature(height),
-            'image/width': dataset_util.int64_feature(width),
-            'image/filename': dataset_util.bytes_feature(filename),
-            'image/source_id': dataset_util.bytes_feature(filename),
-            'image/encoded': dataset_util.bytes_feature(imageEncoded),
-            'image/format': dataset_util.bytes_feature(imageFormat),
-            'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
-            'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
-            'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
-            'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
-            'image/object/class/text': dataset_util.bytes_list_feature(classNames),
-            'image/object/class/label': dataset_util.int64_list_feature(classLabels),
-        }))
+    #     return tf.train.Example(features=tf.train.Features(feature={
+    #         'image/height': dataset_util.int64_feature(height),
+    #         'image/width': dataset_util.int64_feature(width),
+    #         'image/filename': dataset_util.bytes_feature(filename),
+    #         'image/source_id': dataset_util.bytes_feature(filename),
+    #         'image/encoded': dataset_util.bytes_feature(imageEncoded),
+    #         'image/format': dataset_util.bytes_feature(imageFormat),
+    #         'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
+    #         'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
+    #         'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
+    #         'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
+    #         'image/object/class/text': dataset_util.bytes_list_feature(classNames),
+    #         'image/object/class/cardClass': dataset_util.int64_list_feature(classLabels),
+    #     }))
 
     def getImage(self, *, drawVisiblePolygons: bool = False):
         image = self.image.copy()
@@ -249,18 +267,99 @@ class Scene:
         return image
 
 
-deck = Deck()
-backgroundImageSet = BackgroundImageSet()
+class PyTorchDatasetGenerator:
+
+    def __init__(self, path: str, name: str):
+        self.deck = Deck()
+        self.backgroundImageSet = BackgroundImageSet()
+        self.dsRoot = f"{path}/{name}"
+        self._outCounter = 0
+
+        for localPath in [path, self.dsRoot,
+                          f"{self.dsRoot}/config",
+                          f"{self.dsRoot}/images",
+                          f"{self.dsRoot}/labels",
+                          f"{self.dsRoot}/backup",
+                          f"{self.dsRoot}/checkpoints",
+                          ]:
+            if not exists(localPath):
+                mkdir(localPath)
+
+    def _generate(self, typeName: str, count: int):
+        with open(f"{self.dsRoot}/{typeName}.txt", "w") as listWriter:
+            for _ in range(count):
+                self._outCounter += 1
+                imageName = f"scene_{self._outCounter:04}"
+                imageFilePath = f"{self.dsRoot}/images/{imageName}.jpg"
+                objectListFilePath = f"{self.dsRoot}/labels/{imageName}.txt"
+                print(f"Building scene {self._outCounter}...")
+                cardCount = randint(1, 4)
+                # cardList = list(self.deck.getRotatingNext()
+                #                 for _ in range(cardCount))
+                cardList = list(self.deck.cardList[0]
+                                for _ in range(cardCount))
+                scene = Scene(self.backgroundImageSet.getRandom(), cardList)
+                cv.imwrite(imageFilePath, scene.getImage())
+
+                height, width, _ = scene.image.shape
+                with open(objectListFilePath, "w") as objectListWriter:
+                    for card, cpList in scene.visibleCardCorners.items():
+                        for cp in cpList:
+                            minX, minY, maxX, maxY = cp.bounds
+                            x = (minX + maxX) / 2 / width
+                            y = (minY + maxY) / 2 / height
+                            w = (maxX - minX + 1) / width
+                            h = (maxY - minY + 1) / height
+                            print(f"{card.cardClass} {x} {y} {w} {h}",
+                                  file=objectListWriter)
+
+                print(imageFilePath, file=listWriter)
+
+    def generateTrain(self, count: int):
+        self._generate('train', count)
+
+    def generateValid(self, count: int):
+        self._generate('val', count)
+
+    def finalize(self):
+        with open(f"{self.dsRoot}/config/coco.data", "w") as writer:
+            print(f"classes={len(self.deck.cardList)}", file=writer)
+            print(f"train={self.dsRoot}/train.txt", file=writer)
+            print(f"valid={self.dsRoot}/val.txt", file=writer)
+            print(f"names={self.dsRoot}/config/coco.names", file=writer)
+            print(f"backup={self.dsRoot}/backup", file=writer)
+
+        with open(f"{self.dsRoot}/config/coco.names", "w") as writer:
+            for card in self.deck.cardList:
+                print(card.name, file=writer)
+
+
+datasetGenerator = PyTorchDatasetGenerator(
+    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0-onecard')
+datasetGenerator.generateTrain(20)
+datasetGenerator.generateValid(4)
+datasetGenerator.finalize()
+
+
 # card.display()
 # cardList[0].rotatedScaled(30, 0.5).display()
 
-with tf.io.TFRecordWriter('scenes.tfrecord') as writer:
-    for _ in range(10):
-        cardCount = randint(1, 4)
-        cardList = list(deck.getRandom() for _ in range(cardCount))
-        scene = Scene(backgroundImageSet.getRandom(), cardList)
-        record = scene.buildTFExample()
-        writer.write(record.SerializeToString())
+
+# with tf.io.TFRecordWriter(f'{path}/train.tfrecord') as writer:
+#     for i in range(520):
+#         print(f"Building scene {i}...")
+#         cardCount = randint(1, 4)
+#         cardList = list(deck.getRotatingNext() for _ in range(cardCount))
+#         scene = Scene(backgroundImageSet.getRandom(), cardList)
+#         record = scene.buildTFExample()
+#         writer.write(record.SerializeToString())
+
+# with tf.io.TFRecordWriter(f'{path}/test.tfrecord') as writer:
+#     for i in range(52):
+#         print(f"Building scene {i}...")
+#         scene = Scene(backgroundImageSet.getRandom(), [deck.getRotatingNext()])
+#         record = scene.buildTFExample()
+#         writer.write(record.SerializeToString())
 
 
 # while True:
