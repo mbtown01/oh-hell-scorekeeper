@@ -64,11 +64,11 @@ python -m venv /path/to/new/virtual/environment
 ## train.py example
 
 ```bash
-DS_ROOT=/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch/v0-onecard
+DS_ROOT=/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch/v0
 WEIGHTS_PATH=/Users/mbtowns/projects/yolov3.weights
 curl https://pjreddie.com/media/files/yolov3.weights --output ${WEIGHTS_PATH}
 python3 train.py \
-    --batch_size 2 \
+    --batch_size 4 \
     --model_config_path ${DS_ROOT}/../../yolov3.cfg \
     --data_config_path ${DS_ROOT}/config/coco.data \
     --class_path ${DS_ROOT}/config/coco.names \

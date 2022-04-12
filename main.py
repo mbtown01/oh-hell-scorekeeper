@@ -218,44 +218,6 @@ class Scene:
             for i, card in enumerate(self.cardList)
         }
 
-    # def buildTFExample(self):
-    #     # Based on https://towardsdatascience.com/a-practical-guide-to-tfrecords-584536bc786c
-    #     height, width, _ = self.image.shape
-    #     # imageEncoded = cv.cvtColor(self.image, cv.COLOR_BGR2RGB)
-    #     imageEncoded = cv.imencode('.png', self.image)[1]
-    #     imageEncoded = np.asarray(imageEncoded)
-    #     imageEncoded = np.expand_dims(imageEncoded, axis=0)
-    #     imageEncoded = bytes(imageEncoded)
-    #     imageFormat = b'png'
-    #     filename = b''  # Filename of the image. Empty if image is not from file
-
-    #     xmins, xmaxs, ymins, ymaxs, classNames, classLabels = \
-    #         [], [], [], [], [], [],
-    #     for card, cornerPolygons in self.visibleCardCorners.items():
-    #         for cp in cornerPolygons:
-    #             minX, minY, maxX, maxY = cp.bounds
-    #             xmins.append(minX / width)
-    #             xmaxs.append(maxX / width)
-    #             ymins.append(minY / height)
-    #             ymaxs.append(maxY / height)
-    #             classNames.append(card.name.encode('utf-8'))
-    #             classLabels.append(card.cardClass)
-
-    #     return tf.train.Example(features=tf.train.Features(feature={
-    #         'image/height': dataset_util.int64_feature(height),
-    #         'image/width': dataset_util.int64_feature(width),
-    #         'image/filename': dataset_util.bytes_feature(filename),
-    #         'image/source_id': dataset_util.bytes_feature(filename),
-    #         'image/encoded': dataset_util.bytes_feature(imageEncoded),
-    #         'image/format': dataset_util.bytes_feature(imageFormat),
-    #         'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
-    #         'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
-    #         'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
-    #         'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
-    #         'image/object/class/text': dataset_util.bytes_list_feature(classNames),
-    #         'image/object/class/cardClass': dataset_util.int64_list_feature(classLabels),
-    #     }))
-
     def getImage(self, *, drawVisiblePolygons: bool = False):
         image = self.image.copy()
 
@@ -294,9 +256,7 @@ class PyTorchDatasetGenerator:
                 objectListFilePath = f"{self.dsRoot}/labels/{imageName}.txt"
                 print(f"Building scene {self._outCounter}...")
                 cardCount = randint(1, 4)
-                # cardList = list(self.deck.getRotatingNext()
-                #                 for _ in range(cardCount))
-                cardList = list(self.deck.cardList[0]
+                cardList = list(self.deck.getRotatingNext()
                                 for _ in range(cardCount))
                 scene = Scene(self.backgroundImageSet.getRandom(), cardList)
                 cv.imwrite(imageFilePath, scene.getImage())
@@ -335,32 +295,21 @@ class PyTorchDatasetGenerator:
 
 
 datasetGenerator = PyTorchDatasetGenerator(
-    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0-onecard')
-datasetGenerator.generateTrain(20)
-datasetGenerator.generateValid(4)
+    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0')
+datasetGenerator.generateTrain(52*5)
+datasetGenerator.generateValid(52)
 datasetGenerator.finalize()
+
+
+# datasetGenerator = PyTorchDatasetGenerator(
+#     '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0-onecard')
+# datasetGenerator.generateTrain(20)
+# datasetGenerator.generateValid(4)
+# datasetGenerator.finalize()
 
 
 # card.display()
 # cardList[0].rotatedScaled(30, 0.5).display()
-
-
-# with tf.io.TFRecordWriter(f'{path}/train.tfrecord') as writer:
-#     for i in range(520):
-#         print(f"Building scene {i}...")
-#         cardCount = randint(1, 4)
-#         cardList = list(deck.getRotatingNext() for _ in range(cardCount))
-#         scene = Scene(backgroundImageSet.getRandom(), cardList)
-#         record = scene.buildTFExample()
-#         writer.write(record.SerializeToString())
-
-# with tf.io.TFRecordWriter(f'{path}/test.tfrecord') as writer:
-#     for i in range(52):
-#         print(f"Building scene {i}...")
-#         scene = Scene(backgroundImageSet.getRandom(), [deck.getRotatingNext()])
-#         record = scene.buildTFExample()
-#         writer.write(record.SerializeToString())
-
 
 # while True:
 #     cardCount = randint(1, 4)
@@ -370,19 +319,3 @@ datasetGenerator.finalize()
 #     cv.waitKey(0)
 
 print('done')
-
-
-# Some guy wrote a tool to generate the TFRecords required to train our
-# object detector below.  I think we can just DIRECTLY create TFRecords
-# from the code above plus this example we can then use to train a network
-# https://github.com/datitran/raccoon_dataset/blob/master/generate_tfrecord.py
-
-# Also seems that if you have multiple objects in the same image you simply
-# have two FULL TFRecords, each pointing to the same image
-
-# looks like for testing purpuses, there's a reader that can look at what
-# we generate
-# https://github.com/sulc/tfrecord-viewer
-
-# Looks like object_detection/g3doc/using_your_own_dataset.md has some docs
-# on how to make your own tfrecord output
