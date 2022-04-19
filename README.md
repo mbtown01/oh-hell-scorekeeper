@@ -6,6 +6,16 @@ https://towardsdatascience.com/training-yolo-for-object-detection-in-pytorch-wit
 https://towardsdatascience.com/object-detection-and-tracking-in-pytorch-b3cf1a696a98
 https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data
 
+## Setup
+
+```bash
+curl https://www.robots.ox.ac.uk/~vgg/data/dtd/download/dtd-r1.0.1.tar.gz --output dtd.tar.gz
+tar xfvz dtd.tar.gz
+python3 -m pip install \
+    numpy opencv-python Shapely \
+    torch torchvision
+```
+
 ## Dataset generation
 
 https://commons.wikimedia.org/wiki/Category:Complete_decks_of_playing_cards_laid_out#/media/File:Color_52_Faces_v.2.0.svg
@@ -64,8 +74,8 @@ python -m venv /path/to/new/virtual/environment
 ## train.py example
 
 ```bash
-DS_ROOT=/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch/v0
-WEIGHTS_PATH=/Users/mbtowns/projects/yolov3.weights
+DS_ROOT=${HOME}/projects/oh-hell-scorekeeper/data/pytorch/v0
+WEIGHTS_PATH=${HOME}/projects/yolov3.weights
 curl https://pjreddie.com/media/files/yolov3.weights --output ${WEIGHTS_PATH}
 python3 train.py \
     --batch_size 4 \

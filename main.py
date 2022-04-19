@@ -1,5 +1,6 @@
 import numpy as np
 import cv2 as cv
+import yaml
 
 from random import randint, random
 from glob import glob
@@ -229,7 +230,7 @@ class Scene:
         return image
 
 
-class PyTorchDatasetGenerator:
+class YoloDatasetGenerator:
 
     def __init__(self, path: str, name: str):
         self.deck = Deck()
@@ -237,23 +238,30 @@ class PyTorchDatasetGenerator:
         self.dsRoot = f"{path}/{name}"
         self._outCounter = 0
 
-        for localPath in [path, self.dsRoot,
-                          f"{self.dsRoot}/config",
-                          f"{self.dsRoot}/images",
-                          f"{self.dsRoot}/labels",
-                          f"{self.dsRoot}/backup",
-                          f"{self.dsRoot}/checkpoints",
-                          ]:
+    def _buildAllPaths(self, pathList: list):
+        for localPath in pathList:
             if not exists(localPath):
                 mkdir(localPath)
 
-    def _generate(self, typeName: str, count: int):
-        with open(f"{self.dsRoot}/{typeName}.txt", "w") as listWriter:
+    def _generateLabels(self,
+                        indexFileName: str,
+                        count: int,
+                        *,
+                        subFolder: str = None,
+                        ):
+        with open(f"{self.dsRoot}/{indexFileName}", "w") as listWriter:
+            imagesDir = f"{self.dsRoot}/images"
+            labelsDir = f"{self.dsRoot}/labels"
+            if subFolder is not None:
+                imagesDir = f"{imagesDir}/{subFolder}"
+                labelsDir = f"{labelsDir}/{subFolder}"
+                self._buildAllPaths([imagesDir, labelsDir])
+
             for _ in range(count):
                 self._outCounter += 1
                 imageName = f"scene_{self._outCounter:04}"
-                imageFilePath = f"{self.dsRoot}/images/{imageName}.jpg"
-                objectListFilePath = f"{self.dsRoot}/labels/{imageName}.txt"
+                imageFilePath = f"{imagesDir}/{imageName}.jpg"
+                objectListFilePath = f"{labelsDir}/{imageName}.txt"
                 print(f"Building scene {self._outCounter}...")
                 cardCount = randint(1, 4)
                 cardList = list(self.deck.getRotatingNext()
@@ -275,11 +283,26 @@ class PyTorchDatasetGenerator:
 
                 print(imageFilePath, file=listWriter)
 
+
+class YoloV3DatasetGenerator(YoloDatasetGenerator):
+
+    def __init__(self, path: str, name: str):
+        super().__init__(path, name)
+
+        self._buildAllPaths([
+            path, self.dsRoot,
+            f"{self.dsRoot}/config",
+            f"{self.dsRoot}/images",
+            f"{self.dsRoot}/labels",
+            f"{self.dsRoot}/backup",
+            f"{self.dsRoot}/checkpoints",
+        ])
+
     def generateTrain(self, count: int):
-        self._generate('train', count)
+        self._generateLabels('train.txt', count)
 
     def generateValid(self, count: int):
-        self._generate('val', count)
+        self._generateLabels('val.txt', count)
 
     def finalize(self):
         with open(f"{self.dsRoot}/config/coco.data", "w") as writer:
@@ -294,14 +317,47 @@ class PyTorchDatasetGenerator:
                 print(card.name, file=writer)
 
 
-datasetGenerator = PyTorchDatasetGenerator(
-    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0')
-datasetGenerator.generateTrain(52*5)
+class YoloV5DatasetGenerator(YoloDatasetGenerator):
+
+    def __init__(self, path: str, name: str):
+        super().__init__(path, name)
+
+        self._buildAllPaths([
+            path, self.dsRoot,
+            f"{self.dsRoot}/images",
+            f"{self.dsRoot}/labels",
+            f"{self.dsRoot}/checkpoints",
+        ])
+
+    def generateTrain(self, count: int):
+        self._generateLabels('train.txt', count, subFolder='train')
+
+    def generateValid(self, count: int):
+        self._generateLabels('val.txt', count, subFolder='val')
+
+    def finalize(self):
+        data = dict()
+
+        data['path'] = self.dsRoot
+        data['train'] = 'images/train'
+        data['val'] = 'images/val'
+        data['test'] = None
+
+        data['nc'] = len(self.deck.cardList)
+        data['names'] = list(card.name for card in self.deck.cardList)
+
+        with open(f"{self.dsRoot}/config.yaml", "w") as writer:
+            yaml.dump(data, writer)
+
+
+datasetGenerator = YoloV5DatasetGenerator(
+    '/home/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v2')
+datasetGenerator.generateTrain(52*10)
 datasetGenerator.generateValid(52)
 datasetGenerator.finalize()
 
 
-# datasetGenerator = PyTorchDatasetGenerator(
+# datasetGenerator = YoloDatasetGenerator(
 #     '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v0-onecard')
 # datasetGenerator.generateTrain(20)
 # datasetGenerator.generateValid(4)

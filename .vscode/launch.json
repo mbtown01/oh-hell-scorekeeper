@@ -14,5 +14,15 @@
             "stopOnEntry": false,
             "args": [],
         },
+        {
+            "name": "Run inference",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "inference.py",
+            "console": "internalConsole",
+            "stopOnEntry": false,
+            "args": [],
+        },
     ]
 }
