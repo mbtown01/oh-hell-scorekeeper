@@ -1,9 +1,39 @@
 import cv2
 import torch
 
+
+# define a video capture object
+vid = cv2.VideoCapture(0)
+
+model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt')
+
+while(True):
+
+    # Capture the video frame
+    # by frame
+    ret, frame = vid.read()
+
+    # Display the resulting frame
+    height, width, _ = frame.shape
+    cy, cx, size = height // 2, width // 2, min(height, width)
+    frame = frame[cy-size//2:cy+size//2, cx-size//2:cx+size//2, :]
+
+    cv2.imshow('frame', frame)
+    frame = frame[..., ::-1]
+    results = model(frame, size=416)  # includes NMS
+    results.print()
+
+    # the 'q' button is set as the
+    # quitting button you may use any
+    # desired button of your choice
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# # After the loop release the cap object
+# vid.release()
+# exit()
+
 # Model
-model = torch.hub.load('ultralytics/yolov5', 'custom',
-                       path='../yolov5/runs/train/exp8/weights/best.pt')
 
 # # Images
 # # OpenCV image (BGR to RGB)
