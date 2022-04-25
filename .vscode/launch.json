@@ -24,5 +24,15 @@
             "stopOnEntry": false,
             "args": [],
         },
+        {
+            "name": "Process Cards",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "processCards.py",
+            "console": "internalConsole",
+            "stopOnEntry": false,
+            "args": [],
+        },
     ]
 }

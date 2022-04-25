@@ -351,7 +351,7 @@ class YoloV5DatasetGenerator(YoloDatasetGenerator):
 
 
 datasetGenerator = YoloV5DatasetGenerator(
-    '/home/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v2')
+    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v3')
 datasetGenerator.generateTrain(52*10)
 datasetGenerator.generateValid(52)
 datasetGenerator.finalize()

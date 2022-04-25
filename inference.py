@@ -7,6 +7,7 @@ vid = cv2.VideoCapture(0)
 
 model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt')
 
+imageCount = 9
 while(True):
 
     # Capture the video frame
@@ -19,13 +20,20 @@ while(True):
     frame = frame[cy-size//2:cy+size//2, cx-size//2:cx+size//2, :]
 
     cv2.imshow('frame', frame)
-    frame = frame[..., ::-1]
-    results = model(frame, size=416)  # includes NMS
-    results.print()
+    displayFrame = frame[..., ::-1]
+    # results = model(displayFrame, size=416)  # includes NMS
+    # results.print()
 
     # the 'q' button is set as the
     # quitting button you may use any
     # desired button of your choice
+
+    if cv2.waitKey(1) & 0xFF == ord('p'):
+        fileName = f"capture_{imageCount:03}.png"
+        cv2.imwrite(fileName, frame)
+        print(f"Captured {fileName}")
+        imageCount += 1
+
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
@@ -42,16 +50,16 @@ while(True):
 # im2 = cv2.imread('data/pytorch/v2/images/val/scene_0567.jpg')[..., ::-1]
 # imgs = [im1, im2]  # batch of images
 
-imgs = list(cv2.imread(f"data/pytorch/v2/images/val/scene_0{a}.jpg")[..., ::-1]
-            for a in range(521, 572))
+# imgs = list(cv2.imread(f"data/pytorch/v2/images/val/scene_0{a}.jpg")[..., ::-1]
+#             for a in range(521, 572))
 
-# Inference
-results = model(imgs[0:1], size=416)  # includes NMS
-results.print()
-results = model(imgs[1:2], size=416)  # includes NMS
-results.print()
-results = model(imgs[2:3], size=416)  # includes NMS
-results.print()
+# # Inference
+# results = model(imgs[0:1], size=416)  # includes NMS
+# results.print()
+# results = model(imgs[1:2], size=416)  # includes NMS
+# results.print()
+# results = model(imgs[2:3], size=416)  # includes NMS
+# results.print()
 
 
 # Results
@@ -59,5 +67,5 @@ results.print()
 # results.save()  # or .show()
 # results.show()
 
-results.xyxy[0]  # im1 predictions (tensor)
-results.pandas().xyxy[0]  # im1 predictions (pandas)
+# results.xyxy[0]  # im1 predictions (tensor)
+# results.pandas().xyxy[0]  # im1 predictions (pandas)
