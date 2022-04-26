@@ -1,5 +1,3 @@
-from re import S
-import matplotlib.pyplot as plt
 import cv2 as cv
 import numpy as np
 from glob import glob
@@ -22,16 +20,22 @@ def getDistance(p1: tuple, p2: tuple):
 spread = 10
 errThreshold = 4
 
-for filename in sorted(glob('data/images/capture*.png')):
-    # for filename in ['data/images/capture_023.png']:
-    image = cv.imread(filename)
+suits = ['S', 'D', 'H', 'C']
+faces = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']
+cards = list(f"{f}{s}" for s in suits for f in faces)
+
+# Take all the raw images and convert them into something we can use
+# for training
+for filename in sorted(glob('data/images/capture-*.png')):
+    orig = cv.imread(filename)
+    image = orig.copy()
 
     height, width = image.shape[:2]
     center = (width/2, height/2)
     rotate_matrix = cv.getRotationMatrix2D(center=center, angle=38, scale=1)
     image = cv.warpAffine(
         src=image, M=rotate_matrix, dsize=(width, height))
-    orig = image.copy()
+    rotated = image.copy()
 
     imgray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     ret, thresh = cv.threshold(imgray, 127, 255, 0)
@@ -74,7 +78,7 @@ for filename in sorted(glob('data/images/capture*.png')):
         # cv.imshow('frame', frame)
         data.append(
             [index, m, err, isSide, isSideStart, sideCount])
-        print(data[-1])
+        # print(data[-1])
         # cv.waitKey(0)
         index += spread if isSideEnd else 1
 
@@ -153,11 +157,15 @@ for filename in sorted(glob('data/images/capture*.png')):
     pts2 = np.float32([(0, 0), (int(d1), 0), (0, int(d2))])
     rows, cols, ch = image.shape
     M = cv.getAffineTransform(pts1, pts2)
-    trans = cv.warpAffine(orig, M, (cols, rows))
+    trans = cv.warpAffine(rotated, M, (cols, rows))
     trans = trans[:int(d2), :int(d1)]
 
+    cv.imshow('orig', orig)
     cv.imshow('frame', frame)
     cv.imshow('trans', trans)
+
+    # outFileName = filename.replace('images/capture-', 'processed/card-')
+    # cv.imwrite(outFileName, trans)
 
     # trans = image.copy()
 
