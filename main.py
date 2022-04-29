@@ -29,6 +29,11 @@ class Polygon(ShapelyPolygon):
         points = list((int(x)+shiftX, int(y)+shiftY) for x, y, _ in points)
         return Polygon(points)
 
+    @classmethod
+    def fromRectangle(cls, xMin: int, yMin: int, xMax: int, yMax: int):
+        points = [(xMin, yMin), (xMin, yMax), (xMax, yMax), (xMax, yMin)]
+        return Polygon(points)
+
 
 class Card:
 
@@ -39,21 +44,9 @@ class Card:
         self.cardClass = cardClass
         self.image = image
 
-        xMin, xMax = 8, 40
-        yMin, yMax = 16, 91
         height, width, _ = self.image.shape
-
-        self.extentsPolygon = self._buildRectanglePoly(0, 0, width, height)
-        self.cornerPolygons = [
-            self._buildRectanglePoly(
-                xMin, yMin, xMax, yMax),
-            self._buildRectanglePoly(
-                width-xMax, height-yMax, width-xMin, height-yMin),
-        ]
-
-    def _buildRectanglePoly(self, xMin: int, yMin: int, xMax: int, yMax: int):
-        points = [(xMin, yMin), (xMin, yMax), (xMax, yMax), (xMax, yMin)]
-        return Polygon(points)
+        self.extentsPolygon = Polygon.fromRectangle(0, 0, width, height)
+        self.cornerPolygons = list()
 
     def rotatedScaled(self, angle: float, scale: float):
         assert scale <= 1.0
@@ -107,24 +100,8 @@ class Card:
 class Deck:
 
     def __init__(self):
-        """ Loads the deck from the master PNG file """
-        img = cv.imread('data/all-cards-cropped.png', cv.IMREAD_UNCHANGED)
-        imgGray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-
-        rowBoundaries = Deck._findBoundaries(imgGray[:, 200])
-        colBoundaries = Deck._findBoundaries(imgGray[20, :])
-        suitLabels = ['C', 'H', 'S', 'D']
-        valLabels = ['A', '2', '3', '4', '5', '6',
-                     '7', '8', '9', 'T', 'J', 'Q', 'K']
-
         self.cardList = list()
         self._dealIndex = 0
-
-        for (xMin, xMax), valLabel in zip(colBoundaries, valLabels):
-            for (yMin, yMax), suitLabel in zip(rowBoundaries, suitLabels):
-                image = img[yMin:yMax, xMin:xMax]
-                self.cardList.append(
-                    Card(suitLabel, valLabel, len(self.cardList), image))
 
     @classmethod
     def _findBoundaries(cls, range):
@@ -152,6 +129,115 @@ class Deck:
                     f'  name: "{card.name}"\n',
                     "}\n\n",
                 ])
+
+
+class StockPhotoDeck(Deck):
+
+    def __init__(self):
+        super().__init__()
+
+        """ Loads the deck from the master PNG file """
+        img = cv.imread('data/all-cards-cropped.png', cv.IMREAD_UNCHANGED)
+        imgGray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+        rowBoundaries = Deck._findBoundaries(imgGray[:, 200])
+        colBoundaries = Deck._findBoundaries(imgGray[20, :])
+        suitLabels = ['C', 'H', 'S', 'D']
+        valLabels = ['A', '2', '3', '4', '5', '6',
+                     '7', '8', '9', 'T', 'J', 'Q', 'K']
+        xMin, xMax = 8, 40
+        yMin, yMax = 16, 91
+
+        height, width, _ = img.shape
+
+        for (xMin, xMax), valLabel in zip(colBoundaries, valLabels):
+            for (yMin, yMax), suitLabel in zip(rowBoundaries, suitLabels):
+                image = img[yMin:yMax, xMin:xMax]
+                card = Card(suitLabel, valLabel, len(self.cardList), image)
+                self.cardList.append(card)
+                card.cornerPolygons = [
+                    Polygon.fromRectangle(
+                        xMin, yMin, xMax, yMax),
+                    Polygon.fromRectangle(
+                        width-xMax, height-yMax, width-xMin, height-yMin),
+                ]
+
+
+class RealDeck(Deck):
+
+    def __init__(self):
+        super().__init__()
+
+        def findStart(image, xSlice, ySlice, *, xInc=None, yInc=None):
+            lastSum = 0
+            height, width = image.shape
+            while sum(image[ySlice, xSlice]) >= lastSum:
+                lastSum = sum(image[ySlice, xSlice])
+                if yInc is not None:
+                    ySlice += yInc
+                    if ySlice >= height:
+                        break
+                if xInc is not None:
+                    xSlice += xInc
+                    if xSlice >= width:
+                        break
+
+            return xSlice if xInc is not None else ySlice
+
+        for filename in glob('data/processed/card-*.png'):
+            image = cv.imread(filename, cv.IMREAD_UNCHANGED)
+            image = cv.cvtColor(image, cv.COLOR_BGR2BGRA)
+            imgray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+            ret, thresh = cv.threshold(imgray, 127, 255, 0)
+
+            height, width = thresh.shape
+            gutter, xSearch = 10, 100
+
+            txMin = findStart(
+                thresh, gutter, slice(gutter, -gutter), xInc=1)
+            tyMin = findStart(
+                thresh, slice(gutter, xSearch), gutter, yInc=1)
+            tyMax = findStart(
+                thresh, slice(gutter, xSearch), width-gutter, yInc=-1)
+            txMax = findStart(
+                thresh, gutter, slice(tyMax+1, -gutter), xInc=1)
+            txMax = findStart(
+                thresh, txMax-1, slice(gutter, -gutter), xInc=-1)
+
+            bxMin = findStart(
+                thresh, width-gutter, slice(gutter, width-gutter), xInc=-1)
+            byMin = findStart(
+                thresh, slice(-xSearch, -gutter), height-gutter, yInc=-1)
+            byMax = findStart(
+                thresh, slice(-xSearch, -gutter), gutter, yInc=1)
+            bxMax = findStart(
+                thresh, width-gutter, slice(gutter, byMax-1), xInc=-1)
+            bxMax = findStart(
+                thresh, bxMax+1, slice(gutter, -gutter), xInc=1)
+
+            # thresh[:, txMin] = 127
+            # thresh[:, txMax] = 127
+            # thresh[tyMin, :] = 127
+            # thresh[tyMax, :] = 127
+            # thresh[tyMin:tyMax, txMin:txMax] = 127
+
+            # thresh[:, bxMin] = 127
+            # thresh[:, bxMax] = 127
+            # thresh[byMin, :] = 127
+            # thresh[byMax, :] = 127
+
+            # cv.imshow('thresh', thresh)
+            # cv.waitKey(0)
+
+            suitLabel = filename[-5]
+            valLabel = filename[-6]
+
+            card = Card(suitLabel, valLabel, len(self.cardList), image)
+            self.cardList.append(card)
+            card.cornerPolygons = [
+                Polygon.fromRectangle(txMin, tyMin, txMax, tyMax),
+                Polygon.fromRectangle(bxMin, byMin, bxMax, byMax),
+            ]
 
 
 class BackgroundImage:
@@ -189,7 +275,7 @@ class Scene:
         self.image = backgroundImage.getImage().copy()
 
         finalHeight, finalWidth, _ = self.image.shape
-        scale = random()*0.2 + 0.3
+        scale = random()*0.05 + 0.2
 
         for i, origCard in enumerate(cardList):
             while len(self.cardList) != i+1:
@@ -232,8 +318,8 @@ class Scene:
 
 class YoloDatasetGenerator:
 
-    def __init__(self, path: str, name: str):
-        self.deck = Deck()
+    def __init__(self, deck: Deck, path: str, name: str):
+        self.deck = deck
         self.backgroundImageSet = BackgroundImageSet()
         self.dsRoot = f"{path}/{name}"
         self._outCounter = 0
@@ -267,7 +353,8 @@ class YoloDatasetGenerator:
                 cardList = list(self.deck.getRotatingNext()
                                 for _ in range(cardCount))
                 scene = Scene(self.backgroundImageSet.getRandom(), cardList)
-                cv.imwrite(imageFilePath, scene.getImage())
+                cv.imwrite(
+                    imageFilePath, scene.getImage(drawVisiblePolygons=True))
 
                 height, width, _ = scene.image.shape
                 with open(objectListFilePath, "w") as objectListWriter:
@@ -286,8 +373,8 @@ class YoloDatasetGenerator:
 
 class YoloV3DatasetGenerator(YoloDatasetGenerator):
 
-    def __init__(self, path: str, name: str):
-        super().__init__(path, name)
+    def __init__(self, deck: Deck, path: str, name: str):
+        super().__init__(deck, path, name)
 
         self._buildAllPaths([
             path, self.dsRoot,
@@ -319,8 +406,8 @@ class YoloV3DatasetGenerator(YoloDatasetGenerator):
 
 class YoloV5DatasetGenerator(YoloDatasetGenerator):
 
-    def __init__(self, path: str, name: str):
-        super().__init__(path, name)
+    def __init__(self, deck: Deck, path: str, name: str):
+        super().__init__(deck, path, name)
 
         self._buildAllPaths([
             path, self.dsRoot,
@@ -351,9 +438,10 @@ class YoloV5DatasetGenerator(YoloDatasetGenerator):
 
 
 datasetGenerator = YoloV5DatasetGenerator(
-    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v3')
-datasetGenerator.generateTrain(52*10)
-datasetGenerator.generateValid(52)
+    RealDeck(),
+    '/Users/mbtowns/projects/oh-hell-scorekeeper/data/pytorch', 'v4')
+datasetGenerator.generateTrain(52)
+datasetGenerator.generateValid(10)
 datasetGenerator.finalize()
 
 
